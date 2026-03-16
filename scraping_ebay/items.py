@@ -6,12 +6,12 @@ import scrapy
 class ProductItem(scrapy.Item):
     ID = scrapy.Field()
     Name = scrapy.Field()
+    Seller_Name = scrapy.Field()
     Status = scrapy.Field()
     Price = scrapy.Field()
     URL = scrapy.Field()
     UPC = scrapy.Field()
     Item_Specifics = scrapy.Field()
-    Seller_Name = scrapy.Field()
     Store_Categories = scrapy.Field()
     Feedback_Topics_This_Item = scrapy.Field()
     Feedback_Topics_All_Items = scrapy.Field()

@@ -220,12 +220,12 @@ class EbaySpider(scrapy.Spider):
         yield ProductItem(
             ID=item_id,
             Name=summary["Name"],
+            Seller_Name=seller_name,
             Status=summary["Status"],
             Price=summary["Price"],
             URL=summary["URL"],
             UPC=response.xpath('//h2[@itemprop="gtin13"]/text()').extract_first(),
             Item_Specifics=item_specifics,
-            Seller_Name=seller_name,
             Store_Categories=categories if categories else None,
             Feedback_Topics_This_Item=feedback_topics_this_item,
             Feedback_Topics_All_Items=feedback_topics_all_items,
