@@ -1,14 +1,28 @@
 # -*- coding: utf-8 -*-
 
-# Define here the models for your scraped items
-#
-# See documentation in:
-# https://doc.scrapy.org/en/latest/topics/items.html
-
 import scrapy
 
 
-class ScrapingEbayItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+class ProductItem(scrapy.Item):
+    ID = scrapy.Field()
+    Name = scrapy.Field()
+    Status = scrapy.Field()
+    Price = scrapy.Field()
+    URL = scrapy.Field()
+    UPC = scrapy.Field()
+    Item_Specifics = scrapy.Field()
+    Seller_Name = scrapy.Field()
+    Store_Categories = scrapy.Field()
+    Feedback_Topics_This_Item = scrapy.Field()
+    Feedback_Topics_All_Items = scrapy.Field()
+    Feedback_This_Item = scrapy.Field()
+    Feedback_All_Items = scrapy.Field()
+
+
+class SellerItem(scrapy.Item):
+    Seller_Name = scrapy.Field()
+    Seller_Feedback_Score = scrapy.Field()
+    Seller_Positive_Feedback = scrapy.Field()
+    Seller_Items_Sold = scrapy.Field()
+    Seller_Detailed_Ratings = scrapy.Field()
+    Feedback_Total = scrapy.Field()

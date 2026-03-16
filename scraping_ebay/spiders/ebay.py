@@ -1,99 +1,188 @@
 # -*- coding: utf-8 -*-
+import re
 import scrapy
+from scrapy_playwright.page import PageMethod
+from scraping_ebay.items import ProductItem
 
 
 class EbaySpider(scrapy.Spider):
-	
+
 	name = "ebay"
 	allowed_domains = ["ebay.com"]
-	start_urls = ["https://www.ebay.com"]
 
 	# Allow a custom parameter (-a flag in the scrapy command)
 	def __init__(self, search="nintendo switch console"):
 		self.search_string = search
 
-	def parse(self, response):
-		# Extrach the trksid to build a search request	
-		trksid = response.css("input[type='hidden'][name='_trksid']").xpath("@value").extract()[0]       
-		
-		# Build the url and start the requests
-		yield scrapy.Request("http://www.ebay.com/sch/i.html?_from=R40&_trksid=" + trksid +
-							 "&_nkw=" + self.search_string.replace(' ','+') + "&_ipg=200", 
-							 callback=self.parse_link)
+	@staticmethod
+	def _playwright_meta(**extra):
+		"""Build meta dict for Playwright requests.
+		Waits for the challenge JS to redirect, then waits for page load."""
+		meta = {
+			"playwright": True,
+			"playwright_page_methods": [
+				PageMethod("wait_for_url", "**/**/sch/**", timeout=60000),
+				PageMethod("wait_for_load_state", "load"),
+			],
+		}
+		meta.update(extra)
+		return meta
+
+	@staticmethod
+	def _playwright_detail_meta(**extra):
+		"""Build meta dict for Playwright product detail page requests."""
+		meta = {
+			"playwright": True,
+			"playwright_page_methods": [
+				PageMethod("wait_for_url", "**/**/itm/**", timeout=60000),
+				PageMethod("wait_for_load_state", "load"),
+			],
+		}
+		meta.update(extra)
+		return meta
+
+	def start_requests(self):
+		search_url = ("https://www.ebay.com/sch/i.html?_from=R40"
+					  "&_nkw=" + self.search_string.replace(' ', '+') +
+					  "&_ipg=200")
+		yield scrapy.Request(
+			search_url,
+			callback=self.parse_link,
+			meta=self._playwright_meta(),
+		)
 
 	# Parse the search results
 	def parse_link(self, response):
-		# Extract the list of products 
-		results = response.xpath('//div/div/ul/li[contains(@class, "s-item" )]')
+		results = response.css('ul.srp-results li.s-card')
+		self.logger.info("Search page URL: %s", response.url)
+		self.logger.info("Found %d products on page", len(results))
 
-		# Extract info for each product
-		for product in results:		
-			name = product.xpath('.//*[@class="s-item__title"]//text()').extract_first()
-			# Sponsored or New Listing links have a different class
-			if name == None:
-				name = product.xpath('.//*[@class="s-item__title s-item__title--has-tags"]/text()').extract_first()			
-				if name == None:
-					name = product.xpath('.//*[@class="s-item__title s-item__title--has-tags"]//text()').extract_first()			
-			if name == 'New Listing':
-				name = product.xpath('.//*[@class="s-item__title"]//text()').extract()[1]
+		for product in results:
+			product_url = product.css('a.s-card__link::attr(href)').get()
+			if not product_url or 'itm/' not in product_url:
+				continue
 
-			# If this get a None result
-			if name == None:
-				name = "ERROR"
+			product_url = product_url.split('&hash=')[0].split('&itmmeta=')[0]
 
-			price = product.xpath('.//*[@class="s-item__price"]/text()').extract_first()
-			status = product.xpath('.//*[@class="SECONDARY_INFO"]/text()').extract_first()
-			seller_level = product.xpath('.//*[@class="s-item__etrs-text"]/text()').extract_first()
-			location = product.xpath('.//*[@class="s-item__location s-item__itemLocation"]/text()').extract_first()
-			product_url = product.xpath('.//a[@class="s-item__link"]/@href').extract_first()
-
-			# Set default values
-			stars = 0
-			ratings = 0
-
-			stars_text = product.xpath('.//*[@class="clipped"]/text()').extract_first()
-			if stars_text: stars = stars_text[:3]
-			ratings_text = product.xpath('.//*[@aria-hidden="true"]/text()').extract_first()
-			if ratings_text: ratings = ratings_text.split(' ')[0]
+			name = product.css('div.s-card__title span::text').get() or "ERROR"
+			price = product.css('span.s-card__price::text').get()
+			status = product.css('div.s-card__subtitle span::text').get()
 
 			summary_data = {
-							"Name":name,
-							"Status":status,
-							#"Seller_Level":seller_level,
-							#"Location":location,
-							"Price":price,
-							"Stars":stars,
-							"Ratings":ratings,
-							"URL": product_url
-							}
+				"Name": name,
+				"Status": status,
+				"Price": price,
+				"URL": product_url,
+			}
 
-			# Go to the product details page
-			data = {'summary_data': summary_data}
-			yield scrapy.Request(product_url, meta=data, callback=self.parse_product_details)
+			yield scrapy.Request(
+				product_url,
+				meta=self._playwright_detail_meta(summary_data=summary_data),
+				callback=self.parse_product_details,
+			)
 
-		# Get the next page
-		next_page_url = response.xpath('//*/a[@class="x-pagination__control"][2]/@href').extract_first()
+		next_page_url = response.css('a.pagination__next::attr(href)').get()
+		if not next_page_url:
+			next_page_url = response.xpath(
+				'//a[contains(@class, "pagination__next")]/@href'
+			).get()
 
-		# The last page do not have a valid url and ends with '#'
-		if next_page_url == None or str(next_page_url).endswith("#"):
-			self.log("eBay products collected successfully !!!")
+		if next_page_url and not str(next_page_url).endswith("#"):
+			self.logger.info('Next page: %s', next_page_url)
+			yield scrapy.Request(
+				next_page_url,
+				callback=self.parse_link,
+				meta=self._playwright_meta(),
+			)
 		else:
-			print('\n'+'-'*30)
-			print('Next page: {}'.format(next_page_url))
-			yield scrapy.Request(next_page_url, callback=self.parse_link)
-
+			self.logger.info("eBay products collected successfully !!!")
 
 	# Parse details page for each product
 	def parse_product_details(self, response):
+		summary = response.meta['summary_data']
 
-		# Get the summary data
-		data = response.meta['summary_data']
+		# --- Item Specifics ---
+		item_specifics = {}
+		for row in response.css('div.ux-layout-section--features dl.ux-labels-values'):
+			label = row.css('dt.ux-labels-values__labels span.ux-textspans::text').get()
+			value = row.css('dd.ux-labels-values__values span.ux-textspans::text').get()
+			if label and value:
+				item_specifics[label] = value
 
-		# Add more data from details page
-		data['UPC'] = response.xpath('//h2[@itemprop="gtin13"]/text()').extract_first()
+		# --- Seller Info ---
+		seller_card = response.css('div.x-sellercard-atf__info')
+		seller_name = seller_card.css('span.ux-textspans::text').get()
 
-		yield data
+		# --- Feedback counts ---
+		feedback_total = response.xpath(
+			'//*[contains(text(), "Seller feedback")]/following-sibling::span[@class="SECONDARY"]/text()'
+		).get()
+		if feedback_total:
+			feedback_total = feedback_total.strip('()')
 
+		this_item_tab = response.xpath(
+			'//div[contains(@class, "tabs__item")]//span[contains(text(), "This item")]/text()'
+		).get()
+		feedback_this_item = None
+		if this_item_tab:
+			m = re.search(r'\(([0-9,]+)\)', this_item_tab)
+			feedback_this_item = m.group(1) if m else None
 
+		all_items_tab = response.xpath(
+			'//div[contains(@class, "tabs__item")]//span[contains(text(), "All items")]/text()'
+		).get()
+		feedback_all_items = None
+		if all_items_tab:
+			m = re.search(r'\(([0-9,]+)\)', all_items_tab)
+			feedback_all_items = m.group(1) if m else None
 
+		# --- Feedback Topics ---
+		feedback_panels = response.css('div.fdbk-detail-list div.tabs__panel')
+
+		feedback_topics_this_item = None
+		if len(feedback_panels) >= 1:
+			topics = list(dict.fromkeys(
+				t.strip() for t in feedback_panels[0].css(
+					'li.fdbk-detail-list__ai-topic span::text'
+				).getall() if t.strip()
+			))
+			feedback_topics_this_item = topics if topics else None
+
+		feedback_topics_all_items = None
+		if len(feedback_panels) >= 2:
+			topics = list(dict.fromkeys(
+				t.strip() for t in feedback_panels[1].css(
+					'li.fdbk-detail-list__ai-topic span::text'
+				).getall() if t.strip()
+			))
+			feedback_topics_all_items = topics if topics else None
+
+		# --- Popular Categories from Store ---
+		categories = list(dict.fromkeys(
+			t.strip() for t in response.css(
+				'span.x-category-pills__list-item span.ux-textspans::text'
+			).getall() if t.strip()
+		))
+
+		# Extract item ID from URL (e.g. /itm/123456789 → "123456789")
+		item_id = None
+		if '/itm/' in response.url:
+			item_id = response.url.split('/itm/')[1].split('?')[0].split('/')[0]
+
+		# --- Yield ProductItem ---
+		yield ProductItem(
+			ID=item_id,
+			Name=summary['Name'],
+			Status=summary['Status'],
+			Price=summary['Price'],
+			URL=summary['URL'],
+			UPC=response.xpath('//h2[@itemprop="gtin13"]/text()').extract_first(),
+			Item_Specifics=item_specifics,
+			Seller_Name=seller_name,
+			Store_Categories=categories if categories else None,
+			Feedback_Topics_This_Item=feedback_topics_this_item,
+			Feedback_Topics_All_Items=feedback_topics_all_items,
+			Feedback_This_Item=feedback_this_item,
+			Feedback_All_Items=feedback_all_items,
+		)
 
