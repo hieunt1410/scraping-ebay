@@ -94,14 +94,9 @@ ITEM_PIPELINES = {
     'scraping_ebay.pipelines.DuplicateSellerPipeline': 100,
 }
 
-# Route ProductItem → data/products.json, SellerItem → data/sellers.json
+# SellerItem → data/sellers.json (written by the sellers spider)
+# ProductItem output is controlled per-run via -O flag in run_all.sh
 FEEDS = {
-    'data/products.json': {
-        'format': 'json',
-        'encoding': 'utf8',
-        'overwrite': True,
-        'item_classes': ['scraping_ebay.items.ProductItem'],
-    },
     'data/sellers.json': {
         'format': 'json',
         'encoding': 'utf8',

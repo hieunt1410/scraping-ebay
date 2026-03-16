@@ -1,34 +1,80 @@
 # Scraping eBay
 
-This project contains a set of scripts used to scrape Ebay's products data using [Scrapy Web Crawling Framework](https://scrapy.org/).
+Scrapes eBay product listings and seller profiles using [Scrapy](https://scrapy.org/) + [scrapy-playwright](https://github.com/scrapy-plugins/scrapy-playwright) (headless Chromium) to bypass eBay's JS challenge pages.
 
-In the current stage, the list of products scraped is defined by a search string (the same used in eBay web page). 
+Output is split into two files:
+- **`data/products.json`** — one entry per product listing
+- **`data/sellers.json`** — one entry per unique seller
 
-An example of the scraped data can be found in the ***data/*** folder.
+## Setup
 
-The image below shows a scraped data for the *"iphone X 256gb"* search string in ebay.com
+Requires Python 3.12+.
 
-![ebay_iphone_x_256gb_products_sample](https://user-images.githubusercontent.com/22003608/45721730-a6e3fc80-bb7f-11e8-8e8f-50103bf7c842.jpg)
-)
+```bash
+pip install -r requirements.txt
+playwright install chromium
+```
 
-# How to use
+## Usage
 
-You will need Python 3.x to run the scripts.
-Python can be downloaded [here](https://www.python.org/downloads/).
+### Step 1 — Crawl products
 
-You have to install ***scrapy*** framework:
-* In command prompt/Terminal: *pip install scrapy*
-* If you are using [Anaconda Python distribution](https://anaconda.org/anaconda/python): *conda install -c conda-forge scrapy*
+```bash
+scrapy crawl ebay
+```
 
-Once you have installed *scrapy* framework, just clone/download this project, access the folder in command prompt/Terminal and run the following command:
+Output: `data/products.json`
 
-*scrapy crawl ebay -o products.csv*
+To search for a different keyword (default is *nintendo switch console*):
 
-You can change the output format to JSON or XML by change the output file extension (ex: *products.json*).
+```bash
+scrapy crawl ebay -a search="xbox one x"
+```
 
-### Search string
+### Step 2 — Crawl sellers
 
-The default search string is *nintendo switch console* and it can be changed in the command line with the *-a* flag.
-For example, to search to *Xbox one X* you can use:
+Reads the seller names from `data/products.json` and visits each seller's eBay profile page.
 
-*scrapy crawl ebay -o products.csv -a search="Xbox one X"*
+```bash
+scrapy crawl sellers
+```
+
+Output: `data/sellers.json`
+
+## Product fields
+
+| Field | Description |
+|---|---|
+| `ID` | eBay item ID extracted from the URL |
+| `Name` | Product title |
+| `Status` | Condition (e.g. Pre-Owned) |
+| `Price` | Listed price |
+| `URL` | Product page URL |
+| `UPC` | UPC / GTIN-13 if available |
+| `Item_Specifics` | Key-value pairs from the Item Specifics section |
+| `Seller_Name` | Seller username |
+| `Store_Categories` | Categories listed in the seller's store |
+| `Feedback_This_Item` | Number of feedback entries for this specific listing |
+| `Feedback_All_Items` | Total seller feedback count |
+| `Feedback_Topics_This_Item` | AI-summarised feedback topics for this listing |
+| `Feedback_Topics_All_Items` | AI-summarised feedback topics for all seller items |
+
+## Seller fields
+
+| Field | Description |
+|---|---|
+| `Seller_Name` | Seller username |
+| `Seller_Feedback_Score` | Total feedback score |
+| `Seller_Positive_Feedback` | Positive feedback percentage |
+| `Seller_Items_Sold` | Number of items sold |
+| `Seller_Detailed_Ratings` | DSR ratings (description, shipping cost, speed, communication) |
+| `Feedback_Total` | Total feedback count shown on seller card |
+
+## Optional: CaptchaAI integration
+
+If eBay serves a reCAPTCHA page, set your [CaptchaAI](https://captchaai.com) API key to enable automatic solving:
+
+```bash
+export CAPTCHAAI_API_KEY=your_key_here
+scrapy crawl ebay
+```
