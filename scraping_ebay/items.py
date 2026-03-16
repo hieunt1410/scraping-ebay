@@ -17,6 +17,12 @@ class ProductItem(scrapy.Item):
     Feedback_Topics_All_Items = scrapy.Field()
     Feedback_This_Item = scrapy.Field()
     Feedback_All_Items = scrapy.Field()
+    You_May_Also_Like = scrapy.Field()
+    Similar_Customers_Also_Bought = scrapy.Field()
+    Sellers_Other_Items = scrapy.Field()
+    Related_To_This_Item = scrapy.Field()
+    Explore_Related_Items = scrapy.Field()
+    People_Who_Viewed_Also_Viewed = scrapy.Field()
 
 
 class SellerItem(scrapy.Item):
