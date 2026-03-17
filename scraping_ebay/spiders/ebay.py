@@ -48,15 +48,26 @@ class EbaySpider(scrapy.Spider):
     @staticmethod
     def _rec_ids(response, *headings):
         """Extract item IDs from a recommendation section matched by heading text.
-        Searches both <section> and <div> containers."""
+        Finds an h2/h3 heading containing the text, then walks up to its nearest
+        section ancestor to extract only that section's links."""
+        UC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        LC = "abcdefghijklmnopqrstuvwxyz"
         for heading in headings:
             low = heading.lower()
+            # Match the heading element directly (h2 or h3), then go up to nearest section
             hrefs = response.xpath(
-                f'//*[self::section or self::div]'
-                f'[.//*[contains(translate(normalize-space(.), '
-                f'"ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "{low}")]]'
-                f'//a[contains(@href, "/itm/")]/@href'
+                f'//*[self::h2 or self::h3]'
+                f'[contains(translate(normalize-space(.), "{UC}", "{LC}"), "{low}")]'
+                f'/ancestor::section[1]//a[contains(@href, "/itm/")]/@href'
             ).getall()
+            if not hrefs:
+                # Fallback: nearest div ancestor with links
+                hrefs = response.xpath(
+                    f'//*[self::h2 or self::h3]'
+                    f'[contains(translate(normalize-space(.), "{UC}", "{LC}"), "{low}")]'
+                    f'/ancestor::div[.//a[contains(@href, "/itm/")]][1]'
+                    f'//a[contains(@href, "/itm/")]/@href'
+                ).getall()
             if hrefs:
                 return list(dict.fromkeys(
                     h.split("/itm/")[1].split("?")[0].split("/")[0]
